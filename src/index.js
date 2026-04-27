@@ -151,7 +151,7 @@ async function gatherBedrockEnv(existing = {}) {
   if (p.isCancel(token)) bail('Cancelled.');
   const model = await p.text({
     message: 'Default Opus model identifier',
-    initialValue: existing.ANTHROPIC_DEFAULT_OPUS_MODEL || 'us.anthropic.claude-opus-4-6-v1',
+    initialValue: existing.ANTHROPIC_DEFAULT_OPUS_MODEL || 'anthropic.claude-opus-4-7',
   });
   if (p.isCancel(model)) bail('Cancelled.');
   const tokenValue = String(token).trim() || existing.AWS_BEARER_TOKEN_BEDROCK;

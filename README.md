@@ -68,7 +68,7 @@ When you choose AWS Bedrock authentication, the wizard sets these four variables
 export CLAUDE_CODE_USE_BEDROCK=1
 export AWS_REGION=us-east-1
 export AWS_BEARER_TOKEN_BEDROCK=<your-token>
-export ANTHROPIC_DEFAULT_OPUS_MODEL=us.anthropic.claude-opus-4-6-v1
+export ANTHROPIC_DEFAULT_OPUS_MODEL=anthropic.claude-opus-4-7
 ```
 
 These are read by the dev container at startup (see [`agent-sandbox/.devcontainer/devcontainer.json`](https://github.com/DISSC-yale/agent-sandbox/blob/main/.devcontainer/devcontainer.json)). They live on your *host* machine, not in the container or the repo, and never leave your machine.
