@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: Syntax check + smoke test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci
+      - name: Syntax check all source files
+        run: |
+          node --check bin/cli.js
+          node --check src/banner.js
+          node --check src/detect.js
+          node --check src/flags.js
+          node --check src/github.js
+          node --check src/index.js
+          node --check src/install-links.js
+          node --check src/languages.js
+          node --check src/template.js
+          node --check src/windows-env.js
+          node --check src/zprofile.js
+        shell: bash
+      - name: Smoke test --help
+        run: node bin/cli.js --help
+      - name: Smoke test --version
+        run: node bin/cli.js --version
+      - name: Smoke test --check
+        run: node bin/cli.js --check
+        env:
+          NO_COLOR: '1'

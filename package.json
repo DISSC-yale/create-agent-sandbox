@@ -1,0 +1,43 @@
+{
+  "name": "@yale-dissc/create-agent-sandbox",
+  "version": "0.1.0",
+  "description": "Interactive setup wizard for the DISSC agent-sandbox. Detects host dependencies, configures Bedrock or Claude.ai auth, scaffolds the project, and initializes git/GitHub.",
+  "type": "module",
+  "bin": {
+    "create-agent-sandbox": "bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "src/"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node bin/cli.js",
+    "test": "node --test test/"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "agent-sandbox",
+    "devcontainer",
+    "yale",
+    "dissc",
+    "scaffolder"
+  ],
+  "author": "Nicholas Warren <nick.warren@yale.edu>",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DISSC-yale/create-agent-sandbox.git"
+  },
+  "homepage": "https://github.com/DISSC-yale/agent-sandbox",
+  "bugs": {
+    "url": "https://github.com/DISSC-yale/create-agent-sandbox/issues"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.7.0",
+    "picocolors": "^1.0.0"
+  }
+}

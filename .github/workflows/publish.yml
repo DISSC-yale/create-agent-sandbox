@@ -1,0 +1,54 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@yale-dissc'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify package version matches tag
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG=${GITHUB_REF#refs/tags/v}
+          TAG=${TAG:-${{ github.event.inputs.tag }}}
+          TAG=${TAG#v}
+          if [ "$PKG_VERSION" != "$TAG" ]; then
+            echo "::error::package.json version ($PKG_VERSION) does not match git tag ($TAG)"
+            exit 1
+          fi
+
+      - name: Smoke test
+        run: |
+          node bin/cli.js --help
+          node bin/cli.js --version
+          NO_COLOR=1 node bin/cli.js --check
+
+      - name: Publish
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
