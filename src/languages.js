@@ -67,12 +67,26 @@ const LANGUAGE_EXTENSIONS = {
   r: ['reditorsupport.r', 'quarto.quarto'],
 };
 
+const ALL_MANAGED_EXTENSIONS = Object.values(LANGUAGE_EXTENSIONS).flat();
+
 function extensionsForLanguages(languages) {
   const out = [];
   for (const lang of ['python', 'r']) {
     if (languages.includes(lang)) out.push(...LANGUAGE_EXTENSIONS[lang]);
   }
   return out;
+}
+
+function detectIndent(source) {
+  const match = source.match(/\n([ \t]+)\S/);
+  if (!match) return 2;
+  const lead = match[1];
+  if (lead.startsWith('\t')) return '\t';
+  return lead.length;
+}
+
+function detectTrailingNewline(source) {
+  return source.endsWith('\n') ? '\n' : '';
 }
 
 export function planDevcontainerEdit({ projectDir, languages }) {
@@ -93,13 +107,32 @@ export function planDevcontainerEdit({ projectDir, languages }) {
   }
 
   const desired = extensionsForLanguages(languages);
+  const desiredSet = new Set(desired);
+  const managedSet = new Set(ALL_MANAGED_EXTENSIONS);
+
+  const kept = extensions.filter((id) => !managedSet.has(id) || desiredSet.has(id));
+  const removed = extensions.filter((id) => managedSet.has(id) && !desiredSet.has(id));
   const added = desired.filter((id) => !extensions.includes(id));
-  if (added.length === 0) {
-    return { applicable: true, path: devcontainerPath, before, after: before, changed: false, added, languages };
+  const nextExtensions = [...kept];
+  for (const id of added) if (!nextExtensions.includes(id)) nextExtensions.push(id);
+
+  if (added.length === 0 && removed.length === 0) {
+    return {
+      applicable: true,
+      path: devcontainerPath,
+      before,
+      after: before,
+      changed: false,
+      added,
+      removed,
+      languages,
+    };
   }
 
-  parsed.customizations.vscode.extensions = [...extensions, ...added];
-  const after = JSON.stringify(parsed, null, 2) + '\n';
+  parsed.customizations.vscode.extensions = nextExtensions;
+  const indent = detectIndent(before);
+  const trailing = detectTrailingNewline(before);
+  const after = JSON.stringify(parsed, null, indent) + trailing;
   return {
     applicable: true,
     path: devcontainerPath,
@@ -107,6 +140,7 @@ export function planDevcontainerEdit({ projectDir, languages }) {
     after,
     changed: before !== after,
     added,
+    removed,
     languages,
   };
 }

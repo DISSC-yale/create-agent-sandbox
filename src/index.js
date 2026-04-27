@@ -238,7 +238,10 @@ async function applyLanguageChoice({ projectDir, languages, dryRun }) {
   const willEdit = [];
   if (dockerPlan.changed) willEdit.push(dockerPlan.path);
   if (devcontainerPlan.applicable && devcontainerPlan.changed) {
-    willEdit.push(`${devcontainerPlan.path} (+ ${devcontainerPlan.added.join(', ')})`);
+    const parts = [];
+    if (devcontainerPlan.added?.length) parts.push(`+ ${devcontainerPlan.added.join(', ')}`);
+    if (devcontainerPlan.removed?.length) parts.push(`- ${devcontainerPlan.removed.join(', ')}`);
+    willEdit.push(`${devcontainerPlan.path} (${parts.join('; ')})`);
   }
   if (willEdit.length === 0) {
     p.log.info('Dockerfile and devcontainer.json already match your selection; no edits needed.');
