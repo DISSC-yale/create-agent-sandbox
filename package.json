@@ -30,7 +30,7 @@
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
-    "url": "https://github.com/DISSC-yale/create-agent-sandbox.git"
+    "url": "git+https://github.com/DISSC-yale/create-agent-sandbox.git"
   },
   "homepage": "https://github.com/DISSC-yale/agent-sandbox",
   "bugs": {
