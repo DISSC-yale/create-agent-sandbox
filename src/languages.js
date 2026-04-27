@@ -62,6 +62,61 @@ export function applyDockerfileEdit(plan) {
   return { written: true, path: plan.path };
 }
 
+const LANGUAGE_EXTENSIONS = {
+  python: ['ms-python.python'],
+  r: ['reditorsupport.r', 'quarto.quarto'],
+};
+
+function extensionsForLanguages(languages) {
+  const out = [];
+  for (const lang of ['python', 'r']) {
+    if (languages.includes(lang)) out.push(...LANGUAGE_EXTENSIONS[lang]);
+  }
+  return out;
+}
+
+export function planDevcontainerEdit({ projectDir, languages }) {
+  const devcontainerPath = join(projectDir, '.devcontainer', 'devcontainer.json');
+  if (!existsSync(devcontainerPath)) {
+    return { applicable: false, reason: `No devcontainer.json found at ${devcontainerPath}` };
+  }
+  const before = readFileSync(devcontainerPath, 'utf8');
+  let parsed;
+  try {
+    parsed = JSON.parse(before);
+  } catch (err) {
+    return { applicable: false, reason: `devcontainer.json is not valid JSON (${err.message})` };
+  }
+  const extensions = parsed?.customizations?.vscode?.extensions;
+  if (!Array.isArray(extensions)) {
+    return { applicable: false, reason: 'devcontainer.json is missing customizations.vscode.extensions array' };
+  }
+
+  const desired = extensionsForLanguages(languages);
+  const added = desired.filter((id) => !extensions.includes(id));
+  if (added.length === 0) {
+    return { applicable: true, path: devcontainerPath, before, after: before, changed: false, added, languages };
+  }
+
+  parsed.customizations.vscode.extensions = [...extensions, ...added];
+  const after = JSON.stringify(parsed, null, 2) + '\n';
+  return {
+    applicable: true,
+    path: devcontainerPath,
+    before,
+    after,
+    changed: before !== after,
+    added,
+    languages,
+  };
+}
+
+export function applyDevcontainerEdit(plan) {
+  if (!plan.applicable || !plan.changed) return { written: false, path: plan.path };
+  writeFileSync(plan.path, plan.after, 'utf8');
+  return { written: true, path: plan.path };
+}
+
 export function summarizeChoice(languages) {
   if (languages.length === 0) return 'No extra languages: Node only (fastest build, ~2-5 min).';
   const parts = [];

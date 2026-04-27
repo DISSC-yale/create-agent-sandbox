@@ -10,7 +10,7 @@ import { planZprofileWrite, applyZprofileWrite, diffPreview, readExistingBedrock
 import { planWindowsWrite, applyWindowsWrite, diffPreviewWindows, readExistingBedrockEnv as readWindowsBedrockEnv } from './windows-env.js';
 import { fetchTemplate, REPO } from './template.js';
 import { initGit, createGithubRepo, manualInstructions } from './github.js';
-import { planDockerfileEdit, applyDockerfileEdit, summarizeChoice } from './languages.js';
+import { planDockerfileEdit, applyDockerfileEdit, planDevcontainerEdit, applyDevcontainerEdit, summarizeChoice } from './languages.js';
 import { printBanner } from './banner.js';
 
 function bail(msg) {
@@ -223,22 +223,38 @@ async function chooseLanguages() {
 }
 
 async function applyLanguageChoice({ projectDir, languages, dryRun }) {
-  const plan = planDockerfileEdit({ projectDir, languages });
-  if (!plan.applicable) {
-    p.log.warn(plan.reason + '. Skipping language toggle.');
+  const dockerPlan = planDockerfileEdit({ projectDir, languages });
+  if (!dockerPlan.applicable) {
+    p.log.warn(dockerPlan.reason + '. Skipping language toggle.');
     return;
   }
+  const devcontainerPlan = planDevcontainerEdit({ projectDir, languages });
+  if (!devcontainerPlan.applicable) {
+    p.log.warn(devcontainerPlan.reason + '. VS Code extensions will not be updated.');
+  }
+
   p.log.message(summarizeChoice(languages));
-  if (!plan.changed) {
-    p.log.info('Dockerfile already matches your selection; no edits needed.');
+
+  const willEdit = [];
+  if (dockerPlan.changed) willEdit.push(dockerPlan.path);
+  if (devcontainerPlan.applicable && devcontainerPlan.changed) {
+    willEdit.push(`${devcontainerPlan.path} (+ ${devcontainerPlan.added.join(', ')})`);
+  }
+  if (willEdit.length === 0) {
+    p.log.info('Dockerfile and devcontainer.json already match your selection; no edits needed.');
     return;
   }
   if (dryRun) {
-    p.log.info(`[dry-run] would edit ${plan.path} to reflect language selection.`);
+    p.log.info(`[dry-run] would edit:\n  ${willEdit.join('\n  ')}`);
     return;
   }
-  const result = applyDockerfileEdit(plan);
-  if (result.written) p.log.success(`Updated ${result.path}`);
+
+  const dockerResult = applyDockerfileEdit(dockerPlan);
+  const devResult = devcontainerPlan.applicable ? applyDevcontainerEdit(devcontainerPlan) : { written: false };
+  const written = [];
+  if (dockerResult.written) written.push(dockerResult.path);
+  if (devResult.written) written.push(devResult.path);
+  if (written.length) p.log.success(`Updated:\n  ${written.join('\n  ')}`);
 }
 
 async function maybeCreateGithubRepo({ projectDir, projectName, ghReport, dryRun }) {
