@@ -53,8 +53,8 @@ export function readExistingBedrockEnv() {
   return snapshotCurrent();
 }
 
-export function planWindowsWrite(env) {
-  const before = snapshotCurrent();
+export function planWindowsWrite(env, { snapshot } = {}) {
+  const before = snapshot || snapshotCurrent();
   const after = {
     CLAUDE_CODE_USE_BEDROCK: '1',
     AWS_REGION: env.AWS_REGION,

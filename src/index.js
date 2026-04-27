@@ -105,6 +105,14 @@ function detectExistingBedrockEnv() {
   };
 }
 
+const existingBedrockEnvCache = { snapshot: null };
+
+function loadExistingBedrockEnv() {
+  if (existingBedrockEnvCache.snapshot) return existingBedrockEnvCache.snapshot;
+  existingBedrockEnvCache.snapshot = detectExistingBedrockEnv();
+  return existingBedrockEnvCache.snapshot;
+}
+
 function maskToken(value) {
   if (!value) return '(unset)';
   if (value.length <= 8) return '***';
@@ -180,7 +188,7 @@ async function writeBedrockEnv(env, { dryRun }) {
     p.log.success(`Wrote ${result.path}`);
     p.log.message(`To revert: ${result.revertHint}`);
   } else if (IS_WINDOWS) {
-    const plan = planWindowsWrite(env);
+    const plan = planWindowsWrite(env, { snapshot: loadExistingBedrockEnv() });
     p.log.message(diffPreviewWindows(plan));
     if (dryRun) {
       p.log.info('[dry-run] no env vars set.');
@@ -364,7 +372,7 @@ export async function runWizard(flags) {
   const auth = await chooseAuthMode();
   let bedrockEnv = null;
   if (auth === 'bedrock') {
-    const existing = detectExistingBedrockEnv();
+    const existing = loadExistingBedrockEnv();
     const reused = await maybeReuseExistingBedrockEnv(existing);
     bedrockEnv = reused || await gatherBedrockEnv(existing);
     await writeBedrockEnv(bedrockEnv, { dryRun: flags.dryRun });
