@@ -17,6 +17,36 @@ function readZprofile() {
   return readFileSync(ZPROFILE_PATH, 'utf8');
 }
 
+const BEDROCK_VAR_NAMES = [
+  'CLAUDE_CODE_USE_BEDROCK',
+  'AWS_REGION',
+  'AWS_BEARER_TOKEN_BEDROCK',
+  'ANTHROPIC_DEFAULT_OPUS_MODEL',
+];
+
+function parseExportValue(line) {
+  const match = line.match(/^\s*export\s+([A-Z_][A-Z0-9_]*)=(.*)$/);
+  if (!match) return null;
+  let value = match[2].trim();
+  if ((value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))) {
+    value = value.slice(1, -1);
+  }
+  return { name: match[1], value };
+}
+
+export function readExistingBedrockEnv(content = readZprofile()) {
+  const env = Object.fromEntries(BEDROCK_VAR_NAMES.map((k) => [k, null]));
+  if (!content) return env;
+  for (const line of content.split(/\r?\n/)) {
+    const parsed = parseExportValue(line);
+    if (parsed && BEDROCK_VAR_NAMES.includes(parsed.name)) {
+      env[parsed.name] = parsed.value;
+    }
+  }
+  return env;
+}
+
 export function existingBedrockBlock(content = readZprofile()) {
   if (!content) return null;
   const start = content.indexOf(SENTINEL_START);

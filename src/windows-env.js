@@ -49,6 +49,10 @@ export function snapshotCurrent() {
   return snapshot;
 }
 
+export function readExistingBedrockEnv() {
+  return snapshotCurrent();
+}
+
 export function planWindowsWrite(env) {
   const before = snapshotCurrent();
   const after = {
