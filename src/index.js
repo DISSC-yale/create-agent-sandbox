@@ -6,8 +6,8 @@ import { existsSync } from 'node:fs';
 
 import { detectAll, summarize, IS_MAC, IS_WINDOWS } from './detect.js';
 import { hyperlink, installInstruction, tryOpenInBrowser, tryStartDocker } from './install-links.js';
-import { planZprofileWrite, applyZprofileWrite, diffPreview } from './zprofile.js';
-import { planWindowsWrite, applyWindowsWrite, diffPreviewWindows } from './windows-env.js';
+import { planZprofileWrite, applyZprofileWrite, diffPreview, readExistingBedrockEnv as readZprofileBedrockEnv } from './zprofile.js';
+import { planWindowsWrite, applyWindowsWrite, diffPreviewWindows, readExistingBedrockEnv as readWindowsBedrockEnv } from './windows-env.js';
 import { fetchTemplate, REPO } from './template.js';
 import { initGit, createGithubRepo, manualInstructions } from './github.js';
 import { planDockerfileEdit, applyDockerfileEdit, summarizeChoice } from './languages.js';
@@ -94,26 +94,70 @@ async function chooseAuthMode() {
   return choice;
 }
 
-async function gatherBedrockEnv() {
+function detectExistingBedrockEnv() {
+  if (IS_MAC) return readZprofileBedrockEnv();
+  if (IS_WINDOWS) return readWindowsBedrockEnv();
+  return {
+    CLAUDE_CODE_USE_BEDROCK: process.env.CLAUDE_CODE_USE_BEDROCK ?? null,
+    AWS_REGION: process.env.AWS_REGION ?? null,
+    AWS_BEARER_TOKEN_BEDROCK: process.env.AWS_BEARER_TOKEN_BEDROCK ?? null,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: process.env.ANTHROPIC_DEFAULT_OPUS_MODEL ?? null,
+  };
+}
+
+function maskToken(value) {
+  if (!value) return '(unset)';
+  if (value.length <= 8) return '***';
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
+async function maybeReuseExistingBedrockEnv(existing) {
+  const hasAll = existing.AWS_REGION && existing.AWS_BEARER_TOKEN_BEDROCK && existing.ANTHROPIC_DEFAULT_OPUS_MODEL;
+  if (!hasAll) return null;
+  const profileLabel = IS_MAC ? '~/.zprofile' : IS_WINDOWS ? 'Windows User env' : 'current shell';
+  p.log.info(`Found existing Bedrock config in ${profileLabel}:`);
+  p.log.message([
+    `  AWS_REGION=${existing.AWS_REGION}`,
+    `  AWS_BEARER_TOKEN_BEDROCK=${maskToken(existing.AWS_BEARER_TOKEN_BEDROCK)}`,
+    `  ANTHROPIC_DEFAULT_OPUS_MODEL=${existing.ANTHROPIC_DEFAULT_OPUS_MODEL}`,
+  ].join('\n'));
+  const reuse = await p.confirm({ message: 'Reuse these values?', initialValue: true });
+  if (p.isCancel(reuse)) bail('Cancelled.');
+  if (!reuse) return null;
+  return {
+    AWS_REGION: existing.AWS_REGION,
+    AWS_BEARER_TOKEN_BEDROCK: existing.AWS_BEARER_TOKEN_BEDROCK,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: existing.ANTHROPIC_DEFAULT_OPUS_MODEL,
+  };
+}
+
+async function gatherBedrockEnv(existing = {}) {
   const region = await p.text({
     message: 'AWS region',
-    initialValue: 'us-east-1',
+    initialValue: existing.AWS_REGION || 'us-east-1',
     validate: (v) => (v.trim() ? undefined : 'Required'),
   });
   if (p.isCancel(region)) bail('Cancelled.');
+  const tokenPrompt = existing.AWS_BEARER_TOKEN_BEDROCK
+    ? `AWS Bedrock bearer token (press Enter to keep existing ${maskToken(existing.AWS_BEARER_TOKEN_BEDROCK)})`
+    : 'AWS Bedrock bearer token (AWS_BEARER_TOKEN_BEDROCK)';
   const token = await p.password({
-    message: 'AWS Bedrock bearer token (AWS_BEARER_TOKEN_BEDROCK)',
-    validate: (v) => (v.trim() ? undefined : 'Required'),
+    message: tokenPrompt,
+    validate: (v) => {
+      if (v.trim()) return undefined;
+      return existing.AWS_BEARER_TOKEN_BEDROCK ? undefined : 'Required';
+    },
   });
   if (p.isCancel(token)) bail('Cancelled.');
   const model = await p.text({
     message: 'Default Opus model identifier',
-    initialValue: 'us.anthropic.claude-opus-4-6-v1',
+    initialValue: existing.ANTHROPIC_DEFAULT_OPUS_MODEL || 'us.anthropic.claude-opus-4-6-v1',
   });
   if (p.isCancel(model)) bail('Cancelled.');
+  const tokenValue = String(token).trim() || existing.AWS_BEARER_TOKEN_BEDROCK;
   return {
     AWS_REGION: String(region).trim(),
-    AWS_BEARER_TOKEN_BEDROCK: String(token).trim(),
+    AWS_BEARER_TOKEN_BEDROCK: tokenValue,
     ANTHROPIC_DEFAULT_OPUS_MODEL: String(model).trim(),
   };
 }
@@ -301,7 +345,9 @@ export async function runWizard(flags) {
   const auth = await chooseAuthMode();
   let bedrockEnv = null;
   if (auth === 'bedrock') {
-    bedrockEnv = await gatherBedrockEnv();
+    const existing = detectExistingBedrockEnv();
+    const reused = await maybeReuseExistingBedrockEnv(existing);
+    bedrockEnv = reused || await gatherBedrockEnv(existing);
     await writeBedrockEnv(bedrockEnv, { dryRun: flags.dryRun });
   }
 
