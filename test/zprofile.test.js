@@ -112,6 +112,31 @@ test('planZprofileWrite: noop when managed block already matches requested env',
   }
 });
 
+test('planZprofileWrite: noop when all four vars already exist outside a managed block (pre-sentinel-era layout)', SKIP_ON_WINDOWS, async () => {
+  const home = makeTempHome('noop-unmanaged');
+  const zprofilePath = join(home, '.zprofile');
+  writeFileSync(
+    zprofilePath,
+    [
+      '# my own config',
+      'export PATH="/opt/homebrew/bin:$PATH"',
+      'export CLAUDE_CODE_USE_BEDROCK=1',
+      `export AWS_REGION=${VALID_ENV.AWS_REGION}`,
+      `export AWS_BEARER_TOKEN_BEDROCK=${VALID_ENV.AWS_BEARER_TOKEN_BEDROCK}`,
+      `export ANTHROPIC_DEFAULT_OPUS_MODEL=${VALID_ENV.ANTHROPIC_DEFAULT_OPUS_MODEL}`,
+      '',
+    ].join('\n')
+  );
+  try {
+    const { planZprofileWrite } = await loadFreshZprofile(home, 'noop-unmanaged');
+    const plan = planZprofileWrite(VALID_ENV);
+    assert.equal(plan.mode, 'noop');
+    assert.equal(plan.nextContent, plan.existing);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('planZprofileWrite: append-conflict when CLAUDE_CODE_USE_BEDROCK exists outside a managed block', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('conflict');
   const zprofilePath = join(home, '.zprofile');

@@ -87,15 +87,18 @@ function maskBedrockBlock(block) {
   );
 }
 
-function blockValuesMatch(block, env) {
-  if (!block) return false;
-  const vars = readExistingBedrockEnv(block);
+function envValuesMatch(vars, env) {
   return (
     vars.CLAUDE_CODE_USE_BEDROCK === '1' &&
     vars.AWS_REGION === env.AWS_REGION &&
     vars.AWS_BEARER_TOKEN_BEDROCK === env.AWS_BEARER_TOKEN_BEDROCK &&
     vars.ANTHROPIC_DEFAULT_OPUS_MODEL === env.ANTHROPIC_DEFAULT_OPUS_MODEL
   );
+}
+
+function blockValuesMatch(block, env) {
+  if (!block) return false;
+  return envValuesMatch(readExistingBedrockEnv(block), env);
 }
 
 export function planZprofileWrite(env) {
@@ -112,6 +115,18 @@ export function planZprofileWrite(env) {
       existing,
       nextContent: existing,
       block: maskBedrockBlock(detected.block),
+      detected,
+    };
+  }
+  // Pre-sentinel era: the four vars are already exported somewhere in the file
+  // with the requested values. Nothing to do, even though no managed block exists.
+  if (existing !== null && envValuesMatch(readExistingBedrockEnv(existing), env)) {
+    return {
+      path: ZPROFILE_PATH,
+      mode: 'noop',
+      existing,
+      nextContent: existing,
+      block: maskBedrockBlock(newBlock),
       detected,
     };
   }
