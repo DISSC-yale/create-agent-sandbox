@@ -15,7 +15,7 @@
   },
   "scripts": {
     "start": "node bin/cli.js",
-    "test": "node --test 'test/*.test.js'"
+    "test": "node --test test/cli.test.js test/flags.test.js test/languages.test.js test/windows-env.test.js test/zprofile.test.js"
   },
   "keywords": [
     "claude",
