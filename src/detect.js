@@ -6,15 +6,20 @@ export const IS_MAC = PLATFORM === 'darwin';
 export const IS_WINDOWS = PLATFORM === 'win32';
 export const IS_LINUX = PLATFORM === 'linux';
 
+// On Windows, many CLIs we probe (code, gh, git, docker) are .cmd/.bat shims,
+// which Node's spawnSync cannot execute directly without shell: true. Arguments
+// here are hard-coded so shell: true does not introduce an injection risk.
+const SPAWN_OPTS = { encoding: 'utf8', timeout: 5000, shell: IS_WINDOWS };
+
 function which(cmd) {
   const probe = IS_WINDOWS ? 'where' : 'which';
-  const result = spawnSync(probe, [cmd], { encoding: 'utf8' });
+  const result = spawnSync(probe, [cmd], SPAWN_OPTS);
   if (result.status !== 0) return null;
   return result.stdout.split(/\r?\n/)[0].trim() || null;
 }
 
 function tryVersion(cmd, args = ['--version']) {
-  const result = spawnSync(cmd, args, { encoding: 'utf8' });
+  const result = spawnSync(cmd, args, SPAWN_OPTS);
   if (result.status !== 0) return null;
   const first = (result.stdout || result.stderr).trim().split(/\r?\n/)[0];
   const match = first.match(/(\d+\.\d+(?:\.\d+)?)/);
@@ -31,7 +36,9 @@ function detectDocker() {
   const path = which('docker');
   if (!path) return { installed: false, running: false };
   const version = tryVersion('docker');
-  const info = spawnSync('docker', ['info'], { encoding: 'utf8', timeout: 10000 });
+  // `docker info` blocks waiting for the daemon when Docker Desktop is not
+  // running, so cap it tightly.
+  const info = spawnSync('docker', ['info'], { ...SPAWN_OPTS, timeout: 3000 });
   const running = info.status === 0;
   return { installed: true, running, path, version };
 }
@@ -44,7 +51,7 @@ function detectVSCode() {
 
 function detectDevContainersExt() {
   if (!which('code')) return { installed: false };
-  const result = spawnSync('code', ['--list-extensions'], { encoding: 'utf8', timeout: 10000 });
+  const result = spawnSync('code', ['--list-extensions'], SPAWN_OPTS);
   if (result.status !== 0) return { installed: false, error: result.stderr?.trim() };
   const lines = result.stdout.split(/\r?\n/).map((l) => l.trim().toLowerCase());
   return { installed: lines.includes('ms-vscode-remote.remote-containers') };
@@ -54,7 +61,7 @@ function detectGh() {
   const path = which('gh');
   if (!path) return { installed: false, authed: false };
   const version = tryVersion('gh');
-  const auth = spawnSync('gh', ['auth', 'status'], { encoding: 'utf8', timeout: 10000 });
+  const auth = spawnSync('gh', ['auth', 'status'], SPAWN_OPTS);
   const authed = auth.status === 0;
   let user = null;
   if (authed) {
