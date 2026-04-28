@@ -173,6 +173,10 @@ async function gatherBedrockEnv(existing = {}) {
 async function writeBedrockEnv(env, { dryRun }) {
   if (IS_MAC) {
     const plan = planZprofileWrite(env);
+    if (plan.mode === 'noop') {
+      p.log.info(`${plan.path} already has the requested Bedrock config; nothing to write.`);
+      return;
+    }
     p.log.message(diffPreview(plan));
     if (dryRun) {
       p.log.info('[dry-run] no files written.');

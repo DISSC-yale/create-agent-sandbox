@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, copyFileSync, chmodSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, copyFileSync, chmodSync, renameSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -74,6 +74,30 @@ function buildBlock(env) {
   return lines.join('\n');
 }
 
+function maskToken(value) {
+  if (!value) return '(unset)';
+  if (value.length <= 8) return '***';
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
+function maskBedrockBlock(block) {
+  return block.replace(
+    /^(export AWS_BEARER_TOKEN_BEDROCK=)(.*)$/m,
+    (_m, prefix, value) => `${prefix}${maskToken(value)}`
+  );
+}
+
+function blockValuesMatch(block, env) {
+  if (!block) return false;
+  const vars = readExistingBedrockEnv(block);
+  return (
+    vars.CLAUDE_CODE_USE_BEDROCK === '1' &&
+    vars.AWS_REGION === env.AWS_REGION &&
+    vars.AWS_BEARER_TOKEN_BEDROCK === env.AWS_BEARER_TOKEN_BEDROCK &&
+    vars.ANTHROPIC_DEFAULT_OPUS_MODEL === env.ANTHROPIC_DEFAULT_OPUS_MODEL
+  );
+}
+
 export function planZprofileWrite(env) {
   const existing = readZprofile();
   const newBlock = buildBlock(env);
@@ -81,6 +105,16 @@ export function planZprofileWrite(env) {
 
   let nextContent;
   let mode;
+  if (detected?.managed && detected.block && blockValuesMatch(detected.block, env)) {
+    return {
+      path: ZPROFILE_PATH,
+      mode: 'noop',
+      existing,
+      nextContent: existing,
+      block: maskBedrockBlock(detected.block),
+      detected,
+    };
+  }
   if (existing === null) {
     nextContent = newBlock + '\n';
     mode = 'create';
@@ -102,20 +136,43 @@ export function planZprofileWrite(env) {
     mode,
     existing,
     nextContent,
-    block: newBlock,
+    block: maskBedrockBlock(newBlock),
     detected,
   };
 }
 
 export function applyZprofileWrite(plan) {
-  const { path, existing, nextContent, mode } = plan;
+  const { path, existing, nextContent } = plan;
+  if (plan.mode === 'noop') {
+    return { backupPath: null, path, revertHint: '(no changes written)' };
+  }
+
   let backupPath = null;
   if (existing !== null) {
+    const currentOnDisk = readFileSync(path, 'utf8');
+    if (currentOnDisk !== existing) {
+      throw new Error(
+        `Refusing to write: ${path} changed on disk between preview and apply. No changes were made. Re-run the wizard to pick up the new contents.`
+      );
+    }
     backupPath = `${path}.backup-${timestamp()}`;
     copyFileSync(path, backupPath);
+    if (!existsSync(backupPath) || readFileSync(backupPath, 'utf8') !== existing) {
+      throw new Error(`Backup at ${backupPath} did not match source; aborting without modifying ${path}.`);
+    }
   }
-  writeFileSync(path, nextContent, { mode: 0o600 });
-  if (mode === 'create') chmodSync(path, 0o600);
+
+  const tmpPath = `${path}.tmp-${timestamp()}-${process.pid}`;
+  writeFileSync(tmpPath, nextContent, { mode: 0o600 });
+  try {
+    chmodSync(tmpPath, 0o600);
+    renameSync(tmpPath, path);
+  } catch (err) {
+    try { unlinkSync(tmpPath); } catch {}
+    throw err;
+  }
+  chmodSync(path, 0o600);
+
   return {
     backupPath,
     path,
@@ -132,6 +189,7 @@ export function diffPreview(plan) {
     append: `Append to ${plan.path}:`,
     'replace-managed': `Replace existing managed block in ${plan.path} with:`,
     'append-conflict': `WARNING: ${plan.path} already defines CLAUDE_CODE_USE_BEDROCK outside a managed block. Appending the new block; you may want to remove the duplicate manually.\n\nAppending:`,
+    noop: `${plan.path} already has the requested Bedrock config:`,
   };
   return `${headers[mode]}\n\n${block}\n${detected?.malformed ? '\n(note: existing managed block found but missing closing sentinel; appending instead of replacing)' : ''}`;
 }
