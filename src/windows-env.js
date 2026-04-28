@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -29,17 +29,25 @@ function readUserEnv(name) {
   return value === '' ? null : value;
 }
 
+// Pure, testable shape of the PowerShell invocation. The secret value is carried
+// in the child's inherited env (not argv) because on Windows, command lines are
+// readable by any same-user process via Win32_Process.CommandLine.
+export function buildWriteUserEnvInvocation(name, value) {
+  const escapedName = String(name).replace(/'/g, "''");
+  const script = `[System.Environment]::SetEnvironmentVariable('${escapedName}', $env:__AGENT_SANDBOX_VALUE, 'User')`;
+  return {
+    command: 'powershell.exe',
+    args: ['-NoProfile', '-Command', script],
+    childEnv: { __AGENT_SANDBOX_VALUE: String(value) },
+  };
+}
+
 function writeUserEnv(name, value) {
-  const escaped = String(value).replace(/'/g, "''");
-  const result = spawnSync(
-    'powershell.exe',
-    [
-      '-NoProfile',
-      '-Command',
-      `[System.Environment]::SetEnvironmentVariable('${name}','${escaped}','User')`,
-    ],
-    { encoding: 'utf8' }
-  );
+  const { command, args, childEnv } = buildWriteUserEnvInvocation(name, value);
+  const result = spawnSync(command, args, {
+    encoding: 'utf8',
+    env: { ...process.env, ...childEnv },
+  });
   return result.status === 0;
 }
 
@@ -72,11 +80,20 @@ export function planWindowsWrite(env, { snapshot } = {}) {
 export function applyWindowsWrite(plan) {
   mkdirSync(BACKUP_DIR, { recursive: true });
   const backupPath = join(BACKUP_DIR, `env-snapshot-${timestamp()}.json`);
-  writeFileSync(backupPath, JSON.stringify(plan.before, null, 2), 'utf8');
+  const snapshotJson = JSON.stringify(plan.before, null, 2);
+  writeFileSync(backupPath, snapshotJson, 'utf8');
+  // Verify the snapshot landed on disk before we touch any env var.
+  if (readFileSync(backupPath, 'utf8') !== snapshotJson) {
+    throw new Error(`Failed to write verifiable snapshot at ${backupPath}; aborting without setting any env vars.`);
+  }
 
   const failed = [];
   for (const [name, value] of Object.entries(plan.after)) {
-    if (!writeUserEnv(name, value)) failed.push(name);
+    try {
+      if (!writeUserEnv(name, value)) failed.push(name);
+    } catch (err) {
+      failed.push(name);
+    }
   }
 
   return {
