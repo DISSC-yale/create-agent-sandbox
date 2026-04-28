@@ -12,7 +12,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   publish:
@@ -42,6 +41,9 @@ jobs:
             exit 1
           fi
 
+      - name: Run tests
+        run: npm test
+
       - name: Smoke test
         run: |
           node bin/cli.js --help
@@ -49,6 +51,6 @@ jobs:
           NO_COLOR=1 node bin/cli.js --check
 
       - name: Publish
-        run: npm publish --access public --provenance
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
