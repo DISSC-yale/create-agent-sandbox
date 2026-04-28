@@ -1,8 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, platform } from 'node:os';
 import { join } from 'node:path';
+
+// zprofile.js is only used on macOS. On Windows os.homedir() reads USERPROFILE,
+// not HOME, so the test's home override has no effect and tests would target
+// the real ~/.zprofile. POSIX mode bits also don't map onto NTFS.
+const SKIP_ON_WINDOWS = platform() === 'win32'
+  ? { skip: 'zprofile is mac-only; see windows-env.test.js for the Windows path' }
+  : {};
 
 // zprofile.js computes ZPROFILE_PATH from homedir() at load time, so each test
 // sets HOME before a fresh dynamic import (cache-busted via query string).
@@ -22,7 +29,7 @@ const VALID_ENV = {
   ANTHROPIC_DEFAULT_OPUS_MODEL: 'anthropic.claude-opus-4-7',
 };
 
-test('planZprofileWrite: creates a new file when ~/.zprofile is absent', async () => {
+test('planZprofileWrite: creates a new file when ~/.zprofile is absent', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('create');
   try {
     const { planZprofileWrite } = await loadFreshZprofile(home, 'create');
@@ -38,7 +45,7 @@ test('planZprofileWrite: creates a new file when ~/.zprofile is absent', async (
   }
 });
 
-test('planZprofileWrite: appends when file exists without a Bedrock block', async () => {
+test('planZprofileWrite: appends when file exists without a Bedrock block', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('append');
   const zprofilePath = join(home, '.zprofile');
   writeFileSync(zprofilePath, 'export PATH="/usr/local/bin:$PATH"\n');
@@ -53,7 +60,7 @@ test('planZprofileWrite: appends when file exists without a Bedrock block', asyn
   }
 });
 
-test('planZprofileWrite: replace-managed when block already exists with different values', async () => {
+test('planZprofileWrite: replace-managed when block already exists with different values', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('replace');
   const zprofilePath = join(home, '.zprofile');
   const existingBlock = [
@@ -81,7 +88,7 @@ test('planZprofileWrite: replace-managed when block already exists with differen
   }
 });
 
-test('planZprofileWrite: noop when managed block already matches requested env', async () => {
+test('planZprofileWrite: noop when managed block already matches requested env', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('noop');
   const zprofilePath = join(home, '.zprofile');
   const existingBlock = [
@@ -105,7 +112,7 @@ test('planZprofileWrite: noop when managed block already matches requested env',
   }
 });
 
-test('planZprofileWrite: append-conflict when CLAUDE_CODE_USE_BEDROCK exists outside a managed block', async () => {
+test('planZprofileWrite: append-conflict when CLAUDE_CODE_USE_BEDROCK exists outside a managed block', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('conflict');
   const zprofilePath = join(home, '.zprofile');
   writeFileSync(zprofilePath, 'export CLAUDE_CODE_USE_BEDROCK=1\nexport AWS_REGION=eu-west-1\n');
@@ -122,7 +129,7 @@ test('planZprofileWrite: append-conflict when CLAUDE_CODE_USE_BEDROCK exists out
   }
 });
 
-test('applyZprofileWrite: backs up existing file before overwriting', async () => {
+test('applyZprofileWrite: backs up existing file before overwriting', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('backup');
   const zprofilePath = join(home, '.zprofile');
   writeFileSync(zprofilePath, 'original-content\n');
@@ -139,7 +146,7 @@ test('applyZprofileWrite: backs up existing file before overwriting', async () =
   }
 });
 
-test('applyZprofileWrite: sets 0600 permissions on created file', async () => {
+test('applyZprofileWrite: sets 0600 permissions on created file', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('perms');
   try {
     const { planZprofileWrite, applyZprofileWrite } = await loadFreshZprofile(home, 'perms');
@@ -153,7 +160,7 @@ test('applyZprofileWrite: sets 0600 permissions on created file', async () => {
   }
 });
 
-test('readExistingBedrockEnv: handles quoted and unquoted values', async () => {
+test('readExistingBedrockEnv: handles quoted and unquoted values', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('read');
   try {
     const { readExistingBedrockEnv } = await loadFreshZprofile(home, 'read');
@@ -176,7 +183,7 @@ test('readExistingBedrockEnv: handles quoted and unquoted values', async () => {
   }
 });
 
-test('readExistingBedrockEnv: returns nulls for missing file / missing vars', async () => {
+test('readExistingBedrockEnv: returns nulls for missing file / missing vars', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('read-empty');
   try {
     const { readExistingBedrockEnv } = await loadFreshZprofile(home, 'read-empty');
@@ -191,7 +198,7 @@ test('readExistingBedrockEnv: returns nulls for missing file / missing vars', as
   }
 });
 
-test('existingBedrockBlock: detects malformed block (missing closing sentinel)', async () => {
+test('existingBedrockBlock: detects malformed block (missing closing sentinel)', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('malformed');
   try {
     const { existingBedrockBlock } = await loadFreshZprofile(home, 'malformed');
@@ -215,7 +222,7 @@ const PRE_EXISTING_CONTENT = [
   '',
 ].join('\n');
 
-test('preservation: append mode keeps every byte of pre-existing content', async () => {
+test('preservation: append mode keeps every byte of pre-existing content', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('preserve-append');
   const zprofilePath = join(home, '.zprofile');
   writeFileSync(zprofilePath, PRE_EXISTING_CONTENT);
@@ -236,7 +243,7 @@ test('preservation: append mode keeps every byte of pre-existing content', async
   }
 });
 
-test('preservation: replace-managed keeps unrelated lines intact', async () => {
+test('preservation: replace-managed keeps unrelated lines intact', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('preserve-replace');
   const zprofilePath = join(home, '.zprofile');
   const withManagedBlock =
@@ -278,7 +285,7 @@ test('preservation: replace-managed keeps unrelated lines intact', async () => {
   }
 });
 
-test('preservation: backup is created on disk before the new content lands', async () => {
+test('preservation: backup is created on disk before the new content lands', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('backup-before');
   const zprofilePath = join(home, '.zprofile');
   writeFileSync(zprofilePath, PRE_EXISTING_CONTENT);
@@ -297,7 +304,7 @@ test('preservation: backup is created on disk before the new content lands', asy
   }
 });
 
-test('preservation: applyZprofileWrite refuses to write if file changed between plan and apply (TOCTOU)', async () => {
+test('preservation: applyZprofileWrite refuses to write if file changed between plan and apply (TOCTOU)', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('toctou');
   const zprofilePath = join(home, '.zprofile');
   writeFileSync(zprofilePath, PRE_EXISTING_CONTENT);
@@ -315,7 +322,7 @@ test('preservation: applyZprofileWrite refuses to write if file changed between 
   }
 });
 
-test('preservation: append mode tightens permissions to 0600 even when file was 0644', async () => {
+test('preservation: append mode tightens permissions to 0600 even when file was 0644', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('perms-tighten');
   const zprofilePath = join(home, '.zprofile');
   writeFileSync(zprofilePath, PRE_EXISTING_CONTENT, { mode: 0o644 });
@@ -338,7 +345,7 @@ const TOKEN_LONG_ENV = {
   ANTHROPIC_DEFAULT_OPUS_MODEL: 'anthropic.claude-opus-4-7',
 };
 
-test('masking: diffPreview never contains the raw bearer token (mode: create)', async () => {
+test('masking: diffPreview never contains the raw bearer token (mode: create)', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('mask-create');
   try {
     const { planZprofileWrite, diffPreview } = await loadFreshZprofile(home, 'mask-create');
@@ -354,7 +361,7 @@ test('masking: diffPreview never contains the raw bearer token (mode: create)', 
   }
 });
 
-test('masking: diffPreview never contains the raw bearer token (mode: append)', async () => {
+test('masking: diffPreview never contains the raw bearer token (mode: append)', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('mask-append');
   writeFileSync(join(home, '.zprofile'), 'export PATH="/usr/local/bin:$PATH"\n');
   try {
@@ -367,7 +374,7 @@ test('masking: diffPreview never contains the raw bearer token (mode: append)', 
   }
 });
 
-test('masking: diffPreview never contains the raw bearer token (mode: replace-managed)', async () => {
+test('masking: diffPreview never contains the raw bearer token (mode: replace-managed)', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('mask-replace');
   const zprofilePath = join(home, '.zprofile');
   writeFileSync(
@@ -395,7 +402,7 @@ test('masking: diffPreview never contains the raw bearer token (mode: replace-ma
   }
 });
 
-test('masking: diffPreview on noop plan masks the existing on-disk token', async () => {
+test('masking: diffPreview on noop plan masks the existing on-disk token', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('mask-noop');
   const zprofilePath = join(home, '.zprofile');
   writeFileSync(
@@ -422,7 +429,7 @@ test('masking: diffPreview on noop plan masks the existing on-disk token', async
   }
 });
 
-test('masking: the real (unmasked) token still lands in nextContent for the on-disk write', async () => {
+test('masking: the real (unmasked) token still lands in nextContent for the on-disk write', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('mask-write');
   try {
     const { planZprofileWrite, applyZprofileWrite } = await loadFreshZprofile(home, 'mask-write');
@@ -443,7 +450,7 @@ test('masking: the real (unmasked) token still lands in nextContent for the on-d
   }
 });
 
-test('preservation: applyZprofileWrite on noop plan does not create a backup or write', async () => {
+test('preservation: applyZprofileWrite on noop plan does not create a backup or write', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('apply-noop');
   const zprofilePath = join(home, '.zprofile');
   const existing = [
