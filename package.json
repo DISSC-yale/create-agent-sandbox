@@ -1,6 +1,6 @@
 {
   "name": "@yale-dissc/create-agent-sandbox",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Interactive setup wizard for the DISSC agent-sandbox. Detects host dependencies, configures Bedrock or Claude.ai auth, scaffolds the project, and initializes git/GitHub.",
   "type": "module",
   "bin": {
