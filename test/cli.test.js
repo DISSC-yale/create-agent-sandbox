@@ -43,3 +43,20 @@ test('cli: --check runs detection non-interactively and exits 0', () => {
   assert.match(r.stdout, /Node\.js/);
   assert.match(r.stdout, /Detection complete/);
 });
+
+test('cli: rejects a project name from argv that would escape cwd', () => {
+  // Interactive prompt enforces [a-zA-Z0-9._-]+ so a path-like name should be
+  // rejected before any filesystem action. NO_COLOR keeps output clean for grep.
+  const r = runCli(['../escape-attempt'], { env: { ...process.env, NO_COLOR: '1' } });
+  assert.notEqual(r.status, 0, 'should exit non-zero');
+  assert.match(
+    (r.stdout + r.stderr),
+    /Invalid project name|Letters, numbers, dot, dash, underscore only/
+  );
+});
+
+test('cli: rejects a project name from argv containing shell metacharacters', () => {
+  const r = runCli(['foo;rm'], { env: { ...process.env, NO_COLOR: '1' } });
+  assert.notEqual(r.status, 0);
+  assert.match((r.stdout + r.stderr), /Invalid project name|Letters, numbers/);
+});

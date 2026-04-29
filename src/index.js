@@ -18,6 +18,13 @@ function bail(msg) {
   process.exit(1);
 }
 
+function validateProjectName(name) {
+  if (!name) return 'Required';
+  if (!/^[a-zA-Z0-9._-]+$/.test(name)) return 'Letters, numbers, dot, dash, underscore only';
+  if (existsSync(resolve(process.cwd(), name))) return `./${name} already exists`;
+  return undefined;
+}
+
 async function waitForUser(message) {
   await p.text({
     message,
@@ -354,16 +361,14 @@ export async function runWizard(flags) {
   p.log.message(summarize(initial));
 
   let projectName = flags.projectName;
-  if (!projectName) {
+  if (projectName) {
+    const err = validateProjectName(projectName);
+    if (err) bail(`Invalid project name "${projectName}": ${err}`);
+  } else {
     const v = await p.text({
       message: 'Project name (will be created as ./<name>/)',
       placeholder: 'my-research-project',
-      validate: (s) => {
-        if (!s.trim()) return 'Required';
-        if (!/^[a-zA-Z0-9._-]+$/.test(s)) return 'Letters, numbers, dot, dash, underscore only';
-        if (existsSync(resolve(process.cwd(), s))) return `./${s} already exists`;
-        return undefined;
-      },
+      validate: (s) => validateProjectName(String(s).trim()),
     });
     if (p.isCancel(v)) bail('Cancelled.');
     projectName = String(v).trim();
