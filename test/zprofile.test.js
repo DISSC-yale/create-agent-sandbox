@@ -329,6 +329,21 @@ test('preservation: backup is created on disk before the new content lands', SKI
   }
 });
 
+test('preservation: backup file is 0600 even when source was 0644', SKIP_ON_WINDOWS, async () => {
+  const home = makeTempHome('backup-perms');
+  const zprofilePath = join(home, '.zprofile');
+  writeFileSync(zprofilePath, PRE_EXISTING_CONTENT, { mode: 0o644 });
+  try {
+    const { planZprofileWrite, applyZprofileWrite } = await loadFreshZprofile(home, 'backup-perms');
+    const plan = planZprofileWrite(VALID_ENV);
+    const result = applyZprofileWrite(plan);
+    const mode = statSync(result.backupPath).mode & 0o777;
+    assert.equal(mode, 0o600, 'backup must be tightened to 0600, not inherit 0644 from source');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('preservation: applyZprofileWrite refuses to write if file changed between plan and apply (TOCTOU)', SKIP_ON_WINDOWS, async () => {
   const home = makeTempHome('toctou');
   const zprofilePath = join(home, '.zprofile');

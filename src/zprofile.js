@@ -172,6 +172,9 @@ export function applyZprofileWrite(plan) {
     }
     backupPath = `${path}.backup-${timestamp()}`;
     copyFileSync(path, backupPath);
+    // copyFileSync preserves the source's mode (e.g. 0644). Tighten to 0600 so
+    // the backup can't be world-readable even if the original was.
+    chmodSync(backupPath, 0o600);
     if (!existsSync(backupPath) || readFileSync(backupPath, 'utf8') !== existing) {
       throw new Error(`Backup at ${backupPath} did not match source; aborting without modifying ${path}.`);
     }
